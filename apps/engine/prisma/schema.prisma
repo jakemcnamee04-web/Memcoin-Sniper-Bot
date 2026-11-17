@@ -210,3 +210,56 @@ model AppSetting {
   value     Json
   updatedAt DateTime @updatedAt
 }
+
+// ===== Learning loop (src/learning) =====
+
+// Every coin the bot judged, with what its filters measured and what its price
+// did afterwards, so any version of the settings can be replayed on it.
+model TrackedCoin {
+  id                  String   @id @default(cuid())
+  poolAddress         String   @unique
+  tokenMint           String
+  source              String
+  synthetic           Boolean  @default(false)
+  decidedAt           DateTime
+  decision            Decision
+  initialLiquidityUsd Float
+  results             Json     // RecordedResult[]
+  evalThresholds      Json     // EvalThresholds in force at the verdict
+  path                Json     // [msSinceVerdict, priceUsd, liquidityUsd | null][]
+  timeScale           Float    @default(1)
+  status              String   // tracking | done
+  endReason           String?
+  sampleCount         Int      @default(0)
+  updatedAt           DateTime @updatedAt
+
+  @@index([decidedAt])
+  @@index([status])
+}
+
+// The competing versions of the settings. Exactly one is the champion: the
+// version the live paper bot runs.
+model StrategyVersion {
+  id         String    @id @default(cuid())
+  name       String    @unique
+  parentName String?
+  generation Int       @default(0)
+  config     Json      // StrategyConfig
+  isChampion Boolean   @default(false)
+  createdAt  DateTime  @default(now())
+  retiredAt  DateTime?
+
+  @@index([retiredAt])
+  @@index([isChampion])
+}
+
+// One nightly tuner run: the full plan, and what was applied.
+model TunerRun {
+  id       String   @id @default(cuid())
+  ranAt    DateTime
+  applied  Boolean
+  promoted String?
+  report   Json
+
+  @@index([ranAt])
+}

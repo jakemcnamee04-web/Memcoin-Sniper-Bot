@@ -148,7 +148,7 @@ function generateMock(bucket: Bucket): SyntheticMock {
   }
 }
 
-function generateEvent(): PoolEvent {
+export function generateEvent(): PoolEvent {
   const source = SOURCES[Math.floor(Math.random() * SOURCES.length)] ?? "pumpfun";
   const liq = Math.floor(Math.random() * 80_000) + 2_000;
   const price = liq / (Math.random() * 5 + 1) / 1_000_000;

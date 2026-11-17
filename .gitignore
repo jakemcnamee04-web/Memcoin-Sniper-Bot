@@ -65,6 +65,8 @@ tmp/
 temp/
 # what a safe reset from the dashboard saved before deleting
 backups/
+# learning-loop reports; published to the `reports` branch by scripts/push-reports.sh
+reports/
 .DS_Store
 Thumbs.db
 

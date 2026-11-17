@@ -15,7 +15,10 @@
     "fixtures:label": "tsx src/labeling/label-fixtures.ts",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
-    "prisma:studio": "prisma studio"
+    "prisma:studio": "prisma studio",
+    "learning:tune": "tsx src/learning/cli.ts tune",
+    "learning:export": "tsx src/learning/cli.ts export",
+    "learning:status": "tsx src/learning/cli.ts status"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",

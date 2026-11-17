@@ -5,9 +5,10 @@ import { childLogger } from "../utils/logger.js";
 
 const log = childLogger("paper-exec");
 
-const SOL_USD_ESTIMATE = 200; // rough; only used to convert SOL fees to USD
-const NETWORK_FEE_LAMPORTS = 5000;
-const LAMPORTS_PER_SOL = 1_000_000_000;
+// exported for the replay simulator (learning/simulator.ts), which charges the same costs
+export const SOL_USD_ESTIMATE = 200; // rough; only used to convert SOL fees to USD
+export const NETWORK_FEE_LAMPORTS = 5000;
+export const LAMPORTS_PER_SOL = 1_000_000_000;
 
 export interface PaperBuyResult {
   status: "filled" | "failed";
@@ -41,7 +42,7 @@ const rand = (a: number, b: number) => a + Math.random() * (b - a);
  * Slippage model: amm-ish. The bigger the trade vs liquidity, the worse.
  * sizeUsd / liquidityUsd of 1% maps to ~1% slippage; 5% → ~5%, capped at 25%.
  */
-function estimateSlippagePct(sizeUsd: number, liquidityUsd: number): number {
+export function estimateSlippagePct(sizeUsd: number, liquidityUsd: number): number {
   if (liquidityUsd <= 0) return 25;
   const ratio = sizeUsd / liquidityUsd;
   return Math.min(25, Math.max(0.1, ratio * 100));

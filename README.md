@@ -339,6 +339,8 @@ than run on a typo.
 | `pnpm fixtures:label` | label stored pools rug / good / honeypot by what happened on chain, into `apps/engine/fixtures/` |
 | `pnpm docker:up` / `docker:down` / `docker:logs` | local Redis and Postgres |
 | `pnpm prisma:migrate` | apply database migrations |
+| `pnpm learning:status` / `learning:tune` / `learning:export` | the learning loop: what is recorded, run the nightly tuner now, write the weekly review data ([`LEARNING.md`](LEARNING.md)) |
+| `pnpm reports:push` | publish the learning reports to the `reports` branch |
 
 ## Project layout
 
@@ -403,6 +405,7 @@ dashboard on every push and pull request.
 | 3 · Paper trading: executor, exits, rug watcher, P&L | ✅ done |
 | 4 · Analytics: per-filter stats, presets, backtest | ✅ done |
 | Telegram alerts | ✅ done |
+| Learning loop: record every coin, nightly tuner, weekly Claude review ([`LEARNING.md`](LEARNING.md)) | ✅ done |
 | 5 · Paper validation: 2–3 weeks of continuous paper trading | ⏳ next |
 | 6 · Live mode: encrypted keypair, Jito bundles, confirmation UI | ⛔ not started |
 

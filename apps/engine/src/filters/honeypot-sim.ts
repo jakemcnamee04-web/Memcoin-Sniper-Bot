@@ -2,6 +2,7 @@ import type { Filter } from "./types.js";
 import { makeResult } from "./types.js";
 import { env } from "../config/env.js";
 import { SOL_MINT } from "../feeds/parsers/common.js";
+import { jupiterHeaders } from "../execution/market-price.js";
 
 /**
  * 0.01 SOL: large enough that integer rounding means nothing, small enough to
@@ -28,7 +29,7 @@ async function quote(inputMint: string, outputMint: string, amount: string): Pro
   const ctrl = new AbortController();
   const timeout = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
   try {
-    const res = await fetch(url, { signal: ctrl.signal });
+    const res = await fetch(url, { signal: ctrl.signal, headers: jupiterHeaders() });
     if (!res.ok) {
       const noRoute = res.status === 400 || res.status === 404;
       return { ok: false, noRoute, reason: noRoute ? `no route (${res.status})` : `Jupiter API ${res.status}` };
@@ -72,7 +73,8 @@ export const honeypotSimFilter: Filter = {
           : taxFail
             ? `sell tax ${tax}% > max ${cfg.maxSellTaxPct}%`
             : `sell route OK (tax ${tax}%)`,
-        { sellTaxPct: tax },
+        // honeypotSafe lets a replay tell a blocked sell from a tax fail (learning/judge.ts)
+        { sellTaxPct: tax, honeypotSafe: safe },
       );
     }
 
