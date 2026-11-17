@@ -100,21 +100,32 @@ small Linux server works (2 GB of RAM is enough).
 
 ```bash
 # once
-git clone https://github.com/<you>/memcoin-sniper-bot && cd memcoin-sniper-bot
+git clone https://github.com/<you>/Memcoin-Sniper-Bot && cd Memcoin-Sniper-Bot
 pnpm install
-cp .env.example apps/engine/.env        # then fill in keys, Telegram, etc.
-pnpm docker:up                          # Postgres + Redis
-pnpm prisma:migrate                     # creates the learning tables too
-pnpm --filter @sniperbot/engine build
+cp .env.example .env                   # then fill in keys, Telegram, etc.
+ln -s ../../.env apps/engine/.env      # the engine reads .env from its own folder
+pnpm docker:up                         # Postgres + Redis
+pnpm --filter @sniperbot/engine exec prisma migrate deploy   # creates the learning tables too
 
-# keep the engine and dashboard running (pm2 shown; systemd works too)
+# keep the engine and dashboard running (pm2 shown; systemd works too).
+# The engine runs from source through tsx: there is no separate build step.
 npm i -g pm2
-pm2 start "pnpm --filter @sniperbot/engine start" --name engine
+pm2 start "pnpm --filter @sniperbot/engine exec node --import tsx src/index.ts" --name engine
 pm2 start "pnpm dev:dashboard" --name dashboard
 pm2 save && pm2 startup
 ```
 
-Then open the dashboard, press **Bot ON**, and **Start** trading.
+The dashboard has no login, so never open its ports (3000 and 4000) to the
+internet. Reach it through an SSH tunnel from your own computer:
+
+```bash
+ssh -L 3000:localhost:3000 -L 4000:localhost:4000 you@your-server
+```
+
+then open http://localhost:3000, press **Bot ON**, and **Start** trading.
+**The bot comes up OFF after every restart** (a crash, a reboot, a `pm2
+restart`), so after one, tunnel in and switch it back on, or the tracker
+records nothing.
 
 For the review to see the reports, the server needs push access to your fork
 (a deploy key with write access, or a fine-grained token limited to this repo),
