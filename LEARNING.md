@@ -133,9 +133,9 @@ plus two cron lines (server time is UTC):
 
 ```cron
 # nightly report, an hour after the tuner
-15 9 * * *  cd ~/memcoin-sniper-bot && pnpm reports:push >> ~/reports-push.log 2>&1
+15 9 * * *  cd ~/Memcoin-Sniper-Bot && pnpm reports:push >> ~/reports-push.log 2>&1
 # weekly data, before the Sunday evening review
-30 22 * * 0 cd ~/memcoin-sniper-bot && pnpm learning:export && pnpm reports:push >> ~/reports-push.log 2>&1
+30 22 * * 0 cd ~/Memcoin-Sniper-Bot && pnpm learning:export && pnpm reports:push >> ~/reports-push.log 2>&1
 ```
 
 ## Commands
