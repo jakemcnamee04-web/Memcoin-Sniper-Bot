@@ -128,6 +128,38 @@ const envSchema = z.object({
   ENGINE_HTTP_PORT: z.coerce.number().int().positive().default(4000),
   DASHBOARD_PORT: z.coerce.number().int().positive().default(3000),
 
+  // Jupiter API key for api.jup.ag (optional). The keyless lite-api is being
+  // phased out with falling rate limits; with a key, point JUPITER_PRICE_API
+  // and JUPITER_QUOTE_API at https://api.jup.ag/...
+  JUPITER_API_KEY: z.string().optional().default(""),
+
+  // Learning loop (src/learning): record every judged coin, replay versions of
+  // the settings on them nightly, promote a better one. Paper mode only.
+  TRACK_OUTCOMES: boolFromString.default(true),
+  // how long each coin's price is followed after its verdict
+  TRACK_WINDOW_MIN: z.coerce.number().int().min(10).max(720).default(60),
+  // price requests per minute the tracker may spend (Jupiter's free tier allows 60 in all)
+  TRACK_MAX_RPM: z.coerce.number().min(1).max(6000).default(20),
+  // share of rejected coins to follow (1 = all); bought coins are always followed
+  TRACK_REJECT_SAMPLE_RATE: z.coerce.number().min(0).max(1).default(1),
+  TRACK_RETENTION_DAYS: z.coerce.number().int().min(3).max(365).default(21),
+  TUNER_ENABLED: boolFromString.default(true),
+  TUNER_HOUR_UTC: z.coerce.number().int().min(0).max(23).default(8),
+  // false: rank and report only; the live settings never change
+  TUNER_AUTO_PROMOTE: boolFromString.default(true),
+  TUNER_POPULATION: z.coerce.number().int().min(4).max(200).default(20),
+  TUNER_CULL: z.coerce.number().int().min(1).max(100).default(5),
+  TUNER_LOOKBACK_DAYS: z.coerce.number().int().min(2).max(90).default(14),
+  TUNER_HOLDOUT_DAYS: z.coerce.number().int().min(1).max(30).default(3),
+  TUNER_MIN_TRADES: z.coerce.number().int().min(1).default(30),
+  TUNER_MIN_HOLDOUT_TRADES: z.coerce.number().int().min(1).default(10),
+  TUNER_PROMOTE_MARGIN_PCT: z.coerce.number().min(0).default(1),
+  TUNER_PROMOTE_COOLDOWN_DAYS: z.coerce.number().min(0).default(2),
+  // replay at most this many coins a night (an even sample above it) to bound memory; 0 = no limit
+  TUNER_MAX_COINS: z.coerce.number().int().min(0).default(60_000),
+  // nightly and weekly reports are written here (relative to the engine's working directory)
+  LEARNING_REPORTS_DIR: z.string().default("reports"),
+
   // Synthetic feed (for testing pipeline without a Helius key)
   SYNTHETIC_FEED: boolFromString.default(false),
   SYNTHETIC_FEED_MIN_MS: z.coerce.number().int().positive().default(2000),
@@ -153,6 +185,11 @@ function loadEnv(): Env {
 
   if (parsed.data.MODE === "live" && !parsed.data.SOLANA_KEYPAIR_PATH) {
     console.error("[env] MODE=live requires SOLANA_KEYPAIR_PATH.");
+    process.exit(1);
+  }
+
+  if (parsed.data.TUNER_HOLDOUT_DAYS >= parsed.data.TUNER_LOOKBACK_DAYS) {
+    console.error("[env] TUNER_HOLDOUT_DAYS must be shorter than TUNER_LOOKBACK_DAYS.");
     process.exit(1);
   }
 

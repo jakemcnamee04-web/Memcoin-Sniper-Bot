@@ -24,6 +24,12 @@ import { bootstrapPresets } from "./state/filter-presets.js";
 import { loadSettings, startingBalanceUsd, tradingSettings } from "./config/trading-settings.js";
 import { PaperAccount } from "./state/paper-reset.js";
 import { createAlerter } from "./alerts/index.js";
+import { fetchQuoteBatch } from "./execution/market-price.js";
+import { OutcomeTracker } from "./learning/outcome-tracker.js";
+import { PrismaLearningStore } from "./learning/prisma-store.js";
+import { NightlyScheduler, runNightly } from "./learning/nightly.js";
+import { evalThresholdsNow, nightlyDeps } from "./learning/index.js";
+import { LiveStatusWriter } from "./learning/live-status.js";
 
 async function main() {
   logger.info(
@@ -79,6 +85,34 @@ async function main() {
   // Before anything reads them: the bankroll and the trader start from these.
   await loadSettings();
 
+  // === Learning loop: record every judged coin, tune nightly (src/learning) ===
+  const learningStore = new PrismaLearningStore();
+  let tracker: OutcomeTracker | null = null;
+  if (env.TRACK_OUTCOMES) {
+    try {
+      const cut = await learningStore.closeInterrupted();
+      if (cut > 0) logger.info({ cut }, "recordings cut short by the last stop were closed");
+      tracker = new OutcomeTracker({
+        store: learningStore,
+        fetchBatch: fetchQuoteBatch,
+        thresholds: evalThresholdsNow,
+        windowMin: env.TRACK_WINDOW_MIN,
+        maxRpm: env.TRACK_MAX_RPM,
+        rejectSampleRate: env.TRACK_REJECT_SAMPLE_RATE,
+      });
+    } catch (err) {
+      // a database from before the learning tables existed
+      logger.warn({ err: (err as Error).message }, "outcome tracking off — run `pnpm prisma:migrate`");
+    }
+  }
+  const nightly = env.TUNER_ENABLED && tracker
+    ? new NightlyScheduler(
+        env.TUNER_HOUR_UTC,
+        async () => (await learningStore.loadRuns(Date.now() - 2 * 24 * 60 * 60 * 1000)).at(-1)?.ranAt ?? null,
+        () => runNightly(nightlyDeps(learningStore, { apply: true, promote: env.TUNER_AUTO_PROMOTE, notify: true })),
+      )
+    : null;
+
   // === Pool detection pipeline ===
   const stream = env.POOL_FEED === "helius" ? new HeliusLogStream() : new PumpPortalStream();
   const detector = new PoolDetector(stream);
@@ -120,6 +154,7 @@ async function main() {
   detector.on("pool", (event) => {
     const judge = () => {
       trader.cachePool(event);
+      tracker?.notePool(event);
       void orchestrator.evaluate(event);
     };
     const delayMs = isSyntheticPool(event) ? 0 : tradingSettings().evalDelaySec * 1000;
@@ -129,6 +164,7 @@ async function main() {
 
   orchestrator.on("verdict", (v) => {
     void publishVerdict(v);
+    tracker?.onVerdict(v);
     if (v.decision === "snipe") {
       const pool = trader.resolvePool(v);
       if (pool) void trader.handleVerdict(v, pool);
@@ -158,6 +194,8 @@ async function main() {
   exitEngine.start();
   rugWatcher.start();
   pnl.start(60_000);
+  tracker?.start();
+  await nightly?.start();
 
   // Nothing subscribes to the RPC provider until the dashboard turns this on.
   const bot = new BotSwitch({
@@ -189,6 +227,18 @@ async function main() {
 
   const socketServer = new SocketServer(detector, orchestrator, positionStore, pnl, circuit, bot, account);
   await socketServer.start();
+
+  // a small stats file for dashboards that can't reach the engine (learning/live-status.ts)
+  const liveStatus = new LiveStatusWriter({
+    dir: env.LEARNING_REPORTS_DIR,
+    mode: env.MODE,
+    status: () => socketServer.buildStatus(),
+    trading: () => trader.isEnabled(),
+    bankroll: () => pnl.buildSnapshot(),
+    open: () => positionStore.list(),
+    tracker: () => tracker?.getStats() ?? null,
+  });
+  liveStatus.start();
 
   logger.info(
     {
@@ -243,6 +293,7 @@ async function main() {
         skippedHalted: ts.skippedHalted,
         bot: bot.isOn() ? "on" : "off",
         rpcRequests: rpcUsage().rpcRequests,
+        tracked: tracker ? `${tracker.getStats().following} following, ${tracker.getStats().registered} recorded` : "off",
         alerts: as ? (as.disabled ? "disabled" : `${as.sent} sent, ${as.failed} failed, ${as.dropped} dropped`) : undefined,
       },
       "stats",
@@ -267,6 +318,9 @@ async function main() {
       exitEngine.stop();
       if (isPaperMode && env.SELL_ON_SHUTDOWN) exitEngine.sellAllOnShutdown();
       await positionStore.flush();
+      nightly?.stop();
+      await tracker?.stop();
+      await liveStatus.stop();
       await alerter?.stop(signal);
       synthetic?.stop();
       rugWatcher.stop();

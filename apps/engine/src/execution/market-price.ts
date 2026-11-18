@@ -4,7 +4,7 @@ import { SOL_MINT } from "../feeds/parsers/common.js";
 
 const log = childLogger("market-price");
 
-const BATCH = 50; // Jupiter's per-request id limit
+export const BATCH = 50; // Jupiter's per-request id limit
 const TIMEOUT_MS = 4000;
 
 /**
@@ -61,24 +61,37 @@ export function parseQuotes(body: unknown, at: number): Map<string, MarketQuote>
   return out;
 }
 
+/** Jupiter's keyed gateway (api.jup.ag) wants the key in a header; the keyless lite-api ignores it. */
+export function jupiterHeaders(): Record<string, string> {
+  return env.JUPITER_API_KEY ? { "x-api-key": env.JUPITER_API_KEY } : {};
+}
+
+/**
+ * One request for up to 50 mints. Throws when the request itself fails, so a
+ * caller can tell "Jupiter is down" from "Jupiter has no price for it".
+ */
+export async function fetchQuoteBatch(ids: string[]): Promise<Map<string, MarketQuote>> {
+  if (ids.length > BATCH) throw new Error(`at most ${BATCH} ids per request`);
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
+  try {
+    const res = await fetch(`${env.JUPITER_PRICE_API}?ids=${ids.join(",")}`, { signal: ctrl.signal, headers: jupiterHeaders() });
+    if (!res.ok) throw new Error(`Jupiter price API ${res.status}`);
+    return parseQuotes(await res.json(), Date.now());
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /** Current USD prices from Jupiter's keyless price API — free, no RPC credits. */
 export const fetchQuotes: QuoteFetcher = async (mints) => {
   const out = new Map<string, MarketQuote>();
   for (let i = 0; i < mints.length; i += BATCH) {
     const ids = mints.slice(i, i + BATCH);
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
     try {
-      const res = await fetch(`${env.JUPITER_PRICE_API}?ids=${ids.join(",")}`, { signal: ctrl.signal });
-      if (!res.ok) {
-        log.warn({ status: res.status, count: ids.length }, "price lookup failed");
-        continue;
-      }
-      for (const [mint, q] of parseQuotes(await res.json(), Date.now())) out.set(mint, q);
+      for (const [mint, q] of await fetchQuoteBatch(ids)) out.set(mint, q);
     } catch (err) {
       log.warn({ err: (err as Error).message, count: ids.length }, "price lookup failed");
-    } finally {
-      clearTimeout(timer);
     }
   }
   return out;
@@ -94,7 +107,7 @@ export const quoteBuy: BuyQuoter = async (mint, lamports) => {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
   try {
-    const res = await fetch(url, { signal: ctrl.signal });
+    const res = await fetch(url, { signal: ctrl.signal, headers: jupiterHeaders() });
     if (!res.ok) return null;
     const body = (await res.json()) as { outAmount?: string; routePlan?: unknown[] };
     const out = Number(body.outAmount);
