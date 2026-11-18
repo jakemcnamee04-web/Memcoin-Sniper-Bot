@@ -355,7 +355,8 @@ export class SocketServer {
     });
   }
 
-  private buildStatus(): SystemStatus {
+  /** Also read by the live status file (learning/live-status.ts). */
+  buildStatus(): SystemStatus {
     const detectorStats = this.detector.getStats();
     const orchStats = this.orchestrator.getStats();
     const posStats = this.positionStore.getStats();

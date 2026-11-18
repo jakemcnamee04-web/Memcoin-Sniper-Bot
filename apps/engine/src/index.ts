@@ -29,6 +29,7 @@ import { OutcomeTracker } from "./learning/outcome-tracker.js";
 import { PrismaLearningStore } from "./learning/prisma-store.js";
 import { NightlyScheduler, runNightly } from "./learning/nightly.js";
 import { evalThresholdsNow, nightlyDeps } from "./learning/index.js";
+import { LiveStatusWriter } from "./learning/live-status.js";
 
 async function main() {
   logger.info(
@@ -227,6 +228,18 @@ async function main() {
   const socketServer = new SocketServer(detector, orchestrator, positionStore, pnl, circuit, bot, account);
   await socketServer.start();
 
+  // a small stats file for dashboards that can't reach the engine (learning/live-status.ts)
+  const liveStatus = new LiveStatusWriter({
+    dir: env.LEARNING_REPORTS_DIR,
+    mode: env.MODE,
+    status: () => socketServer.buildStatus(),
+    trading: () => trader.isEnabled(),
+    bankroll: () => pnl.buildSnapshot(),
+    open: () => positionStore.list(),
+    tracker: () => tracker?.getStats() ?? null,
+  });
+  liveStatus.start();
+
   logger.info(
     {
       botOn: bot.isOn(),
@@ -307,6 +320,7 @@ async function main() {
       await positionStore.flush();
       nightly?.stop();
       await tracker?.stop();
+      await liveStatus.stop();
       await alerter?.stop(signal);
       synthetic?.stop();
       rugWatcher.stop();
